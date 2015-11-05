@@ -5,8 +5,8 @@
 
 	
     <!-- PLEASE CHANGE THESE VALUES! -->
-    <property name="studentName" value="YourName" />
-    <property name="vunetID" value="VID100" />
+    <property name="studentName" value="laurens_verspeek" />
+    <property name="vunetID" value="lvk460" />
 
     <!-- PLEASE INCREMENT THIS VALUE IF YOU HAPPEN TO SUBMIT AGAIN! -->
     <property name="submitNumber" value="1" />
