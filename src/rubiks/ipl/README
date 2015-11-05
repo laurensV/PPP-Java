@@ -6,4 +6,4 @@ start ipl server:
 $	bin/ipl-server
 
 run this command for each machine: 
-$	bin/java-run -Dibis.server.address=localhost -Dibis.pool.name=rubiks rubiks.ipl.Rubiks
+$	bin/java-run -Dibis.server.address=localhost -Dibis.pool.name=rubiks -Dibis.pool.size=$POOLSIZE rubiks.ipl.Rubiks
