@@ -1,0 +1,9 @@
+BUILD AND RUN INSTRUCTIONS:
+compile files with ant:
+$	ant build
+
+start ipl server: 
+$	bin/ipl-server
+
+run this command for each machine: 
+$	bin/java-run -Dibis.server.address=localhost -Dibis.pool.name=rubiks rubiks.ipl.Rubiks
