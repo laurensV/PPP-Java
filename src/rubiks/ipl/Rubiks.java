@@ -1,4 +1,4 @@
-package rubiks.sequential;
+package rubiks.ipl;
 
 /**
  * Solver for rubik's cube puzzle.

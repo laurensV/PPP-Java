@@ -1,4 +1,4 @@
-package rubiks.sequential;
+package rubiks.ipl;
 
 /**
  * Cache for Cube objects. Using this cache instead of "new Cube()" for every

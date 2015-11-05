@@ -1,4 +1,4 @@
-package rubiks.sequential;
+package rubiks.ipl;
 
 import java.io.BufferedReader;
 import java.io.File;
