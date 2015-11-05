@@ -1,5 +1,9 @@
 package rubiks.ipl;
 
+import ibis.ipl.*;
+import java.io.IOException;
+
+
 /**
  * Solver for rubik's cube puzzle.
  * 
@@ -7,8 +11,66 @@ package rubiks.ipl;
  * 
  */
 public class Rubiks {
-    
+
+    PortType portType = new PortType(PortType.COMMUNICATION_RELIABLE,
+    PortType.SERIALIZATION_DATA, PortType.RECEIVE_EXPLICIT,
+    PortType.CONNECTION_ONE_TO_ONE);
+
+    IbisCapabilities ibisCapabilities = new IbisCapabilities(
+    IbisCapabilities.ELECTIONS_STRICT);
+
     public static final boolean PRINT_SOLUTION = false;
+    
+    private void master(Ibis myIbis) throws IOException {
+        System.out.println("I am the master");
+        // Create a receive port and enable connections.
+        ReceivePort receiver = myIbis.createReceivePort(portType, "master");
+        receiver.enableConnections();
+
+        // Read the message.
+        ReadMessage r = receiver.receive();
+        String s = r.readString();
+        r.finish();
+        System.out.println("Master received: " + s);
+
+        // Close receive port.
+        receiver.close();
+    }
+
+     private void worker(Ibis myIbis, IbisIdentifier master) throws IOException {
+        System.out.println("I am a worker");
+        // Create a send port for sending requests and connect.
+        SendPort sender = myIbis.createSendPort(portType);
+        sender.connect(master, "master");
+
+        // Send the message.
+        WriteMessage w = sender.newMessage();
+        w.writeString("Hi there");
+        w.finish();
+
+        // Close ports.
+        sender.close();
+     }
+
+     private void run() throws Exception {
+        System.out.println("initializing ibis..");
+        // Create an ibis instance.
+        Ibis ibis = IbisFactory.createIbis(ibisCapabilities, null, portType);
+        System.out.println("ibis started!");
+
+        // Elect a master
+        IbisIdentifier master = ibis.registry().elect("master");
+
+        // If I am the master, run master, else run worker.
+        if (master.equals(ibis.identifier())) {
+           master(ibis);
+        } else {
+           worker(ibis, master);
+        }
+
+        // End ibis.
+        ibis.end();
+     }
 
     /**
      * Recursive function to find a solution for a given cube. Only searches to
@@ -112,7 +174,13 @@ public class Rubiks {
      *            list of arguments
      */
     public static void main(String[] arguments) {
-        Cube cube = null;
+        try {
+            new Rubiks().run();
+        } catch (Exception e) {
+            e.printStackTrace(System.err);
+        }
+
+        /*Cube cube = null;
 
         // default parameters of puzzle
         int size = 3;
@@ -174,7 +242,7 @@ public class Rubiks {
         // constant for each set of parameters. Printing this to standard error
         // makes the output of standard out comparable with "diff"
         System.err.println("Solving cube took " + (end - start)
-                + " milliseconds");
+                + " milliseconds");*/
 
     }
 
