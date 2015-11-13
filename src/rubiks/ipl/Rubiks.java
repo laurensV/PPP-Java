@@ -65,7 +65,6 @@ public class Rubiks implements MessageUpcall {
                 try {
                     wait();
                 } catch (Exception e) {
-                    // ignored
                 }
             }
         }
@@ -109,37 +108,54 @@ public class Rubiks implements MessageUpcall {
      private void worker(IbisIdentifier master) throws IOException {
         System.out.println("I am a worker");
 
-        // Create a send port for sending requests and connect.
-        SendPort sendRequestPort = ibis.createSendPort(requestPortType);
-        sendRequestPort.connect(master, "master");
+        while(true){
+	        // Create a send port for sending requests and connect.
+	        SendPort sendRequestPort = ibis.createSendPort(requestPortType);
+	        sendRequestPort.connect(master, "master");
 
-        // Create a receive port for receiving replies from the master
-        ReceivePort receiveReplyPort = ibis.createReceivePort(replyPortType, null);
-        receiveReplyPort.enableConnections();
-        
-        // Send request to master with identifier for receive port so the
-        // master knows where to send the reply to
-        WriteMessage request = sendRequestPort.newMessage();
-        request.writeObject(receiveReplyPort.identifier());
-        request.finish();
+	        // Create a receive port for receiving replies from the master
+	        ReceivePort receiveReplyPort = ibis.createReceivePort(replyPortType, null);
+	        receiveReplyPort.enableConnections();
+	        
+	        // Send request to master with identifier for receive port so the
+	        // master knows where to send the reply to
+	        WriteMessage request = sendRequestPort.newMessage();
+	        request.writeObject(receiveReplyPort.identifier());
+	        request.finish();
 
-        // Get reply from master
-        ReadMessage reply = receiveReplyPort.receive();
+	        // Get reply from master
+	        ReadMessage reply = receiveReplyPort.receive();
 
-        // Get cube from reply
-        Cube myCube = null;
-        try {
-            myCube = (Cube) reply.readObject();
-            System.out.println("Received a cube!");
-        } catch (ClassNotFoundException e) {
-            e.printStackTrace();
+	        // Get cube from reply
+	        Cube myCube = null;
+	        try {
+	            myCube = (Cube) reply.readObject();
+	            System.out.println("Received a cube!");
+	        } catch (ClassNotFoundException e) {
+	            e.printStackTrace();
+	        }
+
+	        reply.finish();
+
+	        // Close ports
+	        sendRequestPort.close();
+	        receiveReplyPort.close();
+
+	        if(myCube == null){
+	            return;
+	        }
+
+	        /* solve my cube */
+	        CubeCache cache = new CubeCache(myCube.getSize());
+        	int solutions = solutions(myCube, cache);
+	        
+	        
+	        if(solutions > 0){
+	            int twists = myCube.getBound();
+	            // TODO: send result back
+	            //broadcastResult(solutions, twists);
+	        }
         }
-
-        reply.finish();
-
-        // Close ports
-        sendRequestPort.close();
-        receiveReplyPort.close();
 
      }
 
