@@ -2,6 +2,8 @@ package rubiks.ipl;
 
 import ibis.ipl.*;
 import java.io.IOException;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 
 /**
@@ -25,14 +27,41 @@ public class Rubiks implements MessageUpcall {
 
     public static final boolean PRINT_SOLUTION = false;
 
-    private Cube cube;
+    private ArrayList<Cube> jobQueue;
+    private boolean queueReady;
+    private Object queueLock = new Object();
+    private Object waitForWorkers = new Object();
     private Ibis ibis;
     private boolean solved;
+    private AtomicInteger numWorkers;
+	private AtomicInteger solutions;
+
+    private void generateJobs(Cube cube) {
+    	jobQueue = new ArrayList<Cube>();
+		
+		// cache used for cube objects. Doing new Cube() for every move
+        // overloads the garbage collector
+        CubeCache cache = new CubeCache(cube.getSize());
+
+    	// generate all possible cubes from this one by twisting it in
+        // every possible way. Gets new objects from the cache
+        jobQueue.addAll(Arrays.asList(cube.generateChildren(cache)));
+
+        // unlock threads (worker requests) waiting for the queue
+	    synchronized (queueLock){ 
+	        queueReady = true; 
+	        queueLock.notifyAll(); 
+	    } 
+    }
     
     private void master(int size, int twists, int seed, String fileName) throws IOException {
         System.out.println("I am the master");
+        queueReady = false;
+        Cube cube = null;
+        solutions = new AtomicInteger(0);
+        numWorkers = new AtomicInteger(0);
+        solved = false;
 
-        cube = null;
         // create cube
         if (fileName == null) {
             cube = new Cube(size, twists, seed);
@@ -60,15 +89,13 @@ public class Rubiks implements MessageUpcall {
 
         // solve
         long start = System.currentTimeMillis();
-        synchronized (this) {
-            while (!solved) {
-                try {
-                    wait();
-                } catch (Exception e) {
-                }
-            }
-        }
+        solve(cube);
         long end = System.currentTimeMillis();
+
+        // notify waiting workers that cube is solved
+        synchronized (queueLock) {
+        	queueLock.notifyAll();
+        }
 
         // NOTE: this is printed to standard error! The rest of the output is
         // constant for each set of parameters. Printing this to standard error
@@ -84,8 +111,21 @@ public class Rubiks implements MessageUpcall {
     public void upcall(ReadMessage message) throws IOException, ClassNotFoundException {
         ReceivePortIdentifier requestPortId = (ReceivePortIdentifier) message.readObject();
 
-        // Finish message, so ibis call this function again
+        int result = message.readInt();
+
+        // Finish message, so ibis can call this function again
         message.finish();
+
+        // Check if there is an result from the worker from a previously given cube
+        if(result != -1){
+        	synchronized (this) {
+				solutions.addAndGet(result);
+				// Decrease the number of workers the master has to wait for
+				numWorkers.decrementAndGet();
+				// notify the master
+				this.notify();
+			}
+        }
 
         // Create a port to send a cube back
         SendPort sendReplyPort = ibis.createSendPort(replyPortType);
@@ -95,19 +135,45 @@ public class Rubiks implements MessageUpcall {
 
         // create a reply message
         WriteMessage replyMessage = sendReplyPort.newMessage();
-        
-        synchronized (cube) {
-            cube.setBound(cube.getBound()+1);
-            replyMessage.writeObject(cube);
-            replyMessage.finish();
-        }
+
+        Cube workerCube = null;
+
+        if(!solved) {
+	        while (workerCube == null){
+	        	// wait for queue to be ready
+		        synchronized (queueLock){
+		            while(!queueReady){ 
+		                try { 
+		                    queueLock.wait(); 
+		                } catch (InterruptedException e) {  
+		                } 
+		            } 
+		        }
+		        if(solved) {
+		 			break;
+		        }
+		        synchronized (jobQueue) {
+			        try { 
+			            workerCube = jobQueue.remove(jobQueue.size() - 1);
+			        } catch (Exception e){
+			        	// queue is empty
+			            queueReady = false;  
+			        } 
+		        }
+		    }
+		}
+	    // Increase the number of workers the master has to wait for
+	    numWorkers.incrementAndGet();
+
+       	replyMessage.writeObject(workerCube);
+       	replyMessage.finish();
 
         sendReplyPort.close();
     }
 
      private void worker(IbisIdentifier master) throws IOException {
         System.out.println("I am a worker");
-
+        int result = -1;
         while(true){
 	        // Create a send port for sending requests and connect.
 	        SendPort sendRequestPort = ibis.createSendPort(requestPortType);
@@ -121,6 +187,7 @@ public class Rubiks implements MessageUpcall {
 	        // master knows where to send the reply to
 	        WriteMessage request = sendRequestPort.newMessage();
 	        request.writeObject(receiveReplyPort.identifier());
+	        request.writeInt(result);
 	        request.finish();
 
 	        // Get reply from master
@@ -147,14 +214,7 @@ public class Rubiks implements MessageUpcall {
 
 	        /* solve my cube */
 	        CubeCache cache = new CubeCache(myCube.getSize());
-        	int solutions = solutions(myCube, cache);
-	        
-	        
-	        if(solutions > 0){
-	            int twists = myCube.getBound();
-	            // TODO: send result back
-	            //broadcastResult(solutions, twists);
-	        }
+        	result = solutions(myCube, cache);
         }
 
      }
@@ -165,6 +225,7 @@ public class Rubiks implements MessageUpcall {
         int twists = 11;
         int seed = 0;
         String fileName = null;
+        solved = false;
 
         // number of threads used to solve puzzle
         // (not used in sequential version)
@@ -192,8 +253,6 @@ public class Rubiks implements MessageUpcall {
             }
         }
         
-        solved = false;
-
         // Create an ibis instance.
         ibis = IbisFactory.createIbis(ibisCapabilities, null, replyPortType, requestPortType);
 
@@ -263,25 +322,49 @@ public class Rubiks implements MessageUpcall {
      * @param cube
      *            the cube to solve
      */
-    private static void solve(Cube cube) {
-        // cache used for cube objects. Doing new Cube() for every move
-        // overloads the garbage collector
-        CubeCache cache = new CubeCache(cube.getSize());
+    private void solve(Cube cube) {
         int bound = 0;
-        int result = 0;
 
         System.out.print("Bound now:");
 
-        while (result == 0) {
-            bound++;
+        while (solutions.get() == 0) {
+        	queueReady = false;
+	       	bound++;
             cube.setBound(bound);
+            generateJobs(cube);
+        	System.out.print(" " + bound);
 
-            System.out.print(" " + bound);
-            result = solutions(cube, cache);
+        	Cube myCube = null;
+
+        	// master will also solve cubes from queue
+        	while (queueReady){
+	        	synchronized (jobQueue) {
+			        try { 
+			            myCube = jobQueue.remove(jobQueue.size() - 1);
+			        } catch (Exception e){
+			        	// queue is empty
+			            queueReady = false;  
+			        } 
+		        }
+	        	/* solve my cube */
+		        CubeCache cache = new CubeCache(myCube.getSize());
+	        	int result = solutions(myCube, cache);
+	        	solutions.addAndGet(result);
+       		}	
+
+       		// queue is empty, wait for all results from workers
+        	synchronized (this) {
+        		while (numWorkers.get() != 0) {
+					try {
+						this.wait();
+					} catch (Exception e) {
+					}
+				}
+        	}
         }
-
+        solved = true;
         System.out.println();
-        System.out.println("Solving cube possible in " + result + " ways of "
+        System.out.println("Solving cube possible in " + solutions.get() + " ways of "
                 + bound + " steps");
     }
 
