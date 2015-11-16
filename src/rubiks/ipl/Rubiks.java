@@ -109,9 +109,9 @@ public class Rubiks implements MessageUpcall {
 
     /* Function called by Ibis to give us a newly arrived message.*/
     public void upcall(ReadMessage message) throws IOException, ClassNotFoundException {
-        ReceivePortIdentifier requestPortId = (ReceivePortIdentifier) message.readObject();
-
         int result = message.readInt();
+
+        IbisIdentifier worker = message.origin().ibisIdentifier();
 
         // Finish message, so ibis can call this function again
         message.finish();
@@ -131,7 +131,7 @@ public class Rubiks implements MessageUpcall {
         SendPort sendReplyPort = ibis.createSendPort(replyPortType);
 
         // Connect to the port id of the worker
-        sendReplyPort.connect(requestPortId);
+        sendReplyPort.connect(worker, "reply");
 
         // create a reply message
         WriteMessage replyMessage = sendReplyPort.newMessage();
@@ -180,13 +180,12 @@ public class Rubiks implements MessageUpcall {
 	        sendRequestPort.connect(master, "master");
 
 	        // Create a receive port for receiving replies from the master
-	        ReceivePort receiveReplyPort = ibis.createReceivePort(replyPortType, null);
+	        ReceivePort receiveReplyPort = ibis.createReceivePort(replyPortType, "reply");
 	        receiveReplyPort.enableConnections();
 	        
 	        // Send request to master with identifier for receive port so the
 	        // master knows where to send the reply to
 	        WriteMessage request = sendRequestPort.newMessage();
-	        request.writeObject(receiveReplyPort.identifier());
 	        request.writeInt(result);
 	        request.finish();
 
