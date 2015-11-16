@@ -362,6 +362,7 @@ public class Rubiks implements MessageUpcall {
 				}
         	}
         }
+        queueReady = true;  
         solved = true;
         System.out.println();
         System.out.println("Solving cube possible in " + solutions.get() + " ways of "
