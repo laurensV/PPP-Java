@@ -28,16 +28,16 @@ public class Rubiks implements MessageUpcall {
     public static final boolean PRINT_SOLUTION = false;
 
     private ArrayList<Cube> jobQueue;
+    private HashMap<IbisIdentifier, SendPort> workers;
     private boolean queueReady;
     private Object queueLock = new Object();
     private Object waitForWorkers = new Object();
     private Ibis ibis;
     private boolean solved;
-    private AtomicInteger numWorkers;
+    private AtomicInteger activeWorkers;
 	private AtomicInteger solutions;
 
     private void generateJobs(Cube cube) {
-    	jobQueue = new ArrayList<Cube>();
 		
 		// cache used for cube objects. Doing new Cube() for every move
         // overloads the garbage collector
@@ -56,11 +56,15 @@ public class Rubiks implements MessageUpcall {
     
     private void master(int size, int twists, int seed, String fileName) throws IOException {
         System.out.println("I am the master");
+        // initialize variables
         queueReady = false;
+        solved = false;
         Cube cube = null;
         solutions = new AtomicInteger(0);
-        numWorkers = new AtomicInteger(0);
+        activeWorkers = new AtomicInteger(0);
         solved = false;
+        workers = new HashMap<IbisIdentifier, SendPort>();
+    	jobQueue = new ArrayList<Cube>();
 
         // create cube
         if (fileName == null) {
@@ -87,7 +91,7 @@ public class Rubiks implements MessageUpcall {
         receiveRequestPort.enableMessageUpcalls();
 
 
-        // solve
+        // solve the cube
         long start = System.currentTimeMillis();
         solve(cube);
         long end = System.currentTimeMillis();
@@ -109,8 +113,8 @@ public class Rubiks implements MessageUpcall {
 
     /* Function called by Ibis to give us a newly arrived message.*/
     public void upcall(ReadMessage message) throws IOException, ClassNotFoundException {
+    	SendPort sendReplyPort;
         int result = message.readInt();
-
         IbisIdentifier worker = message.origin().ibisIdentifier();
 
         // Finish message, so ibis can call this function again
@@ -121,17 +125,28 @@ public class Rubiks implements MessageUpcall {
         	synchronized (this) {
 				solutions.addAndGet(result);
 				// Decrease the number of workers the master has to wait for
-				numWorkers.decrementAndGet();
+				activeWorkers.decrementAndGet();
 				// notify the master
 				this.notify();
 			}
         }
+        // Check if there is already a connection for a returning worker
+        sendReplyPort = workers.get(worker);
 
-        // Create a port to send a cube back
-        SendPort sendReplyPort = ibis.createSendPort(replyPortType);
+        // create new connection for a new worker
+        if(sendReplyPort == null){
+	        try {
+	        	// Create a port to send a cube back
+				sendReplyPort = ibis.createSendPort(replyPortType);
 
-        // Connect to the port id of the worker
-        sendReplyPort.connect(worker, "reply");
+		        // Connect to the port id of the worker
+		        sendReplyPort.connect(worker, "reply");
+
+				workers.put(worker, sendReplyPort);
+			} catch (IOException e) {
+				e.printStackTrace(System.err);
+			}
+		}
 
         // create a reply message
         WriteMessage replyMessage = sendReplyPort.newMessage();
@@ -163,26 +178,28 @@ public class Rubiks implements MessageUpcall {
 		    }
 		}
 	    // Increase the number of workers the master has to wait for
-	    numWorkers.incrementAndGet();
+	    activeWorkers.incrementAndGet();
 
        	replyMessage.writeObject(workerCube);
        	replyMessage.finish();
-
-        sendReplyPort.close();
+       	
+       	// If workerCube equals null, we are done and we can close the connection
+       	if(workerCube == null){
+        	sendReplyPort.close();
+    	}
     }
 
      private void worker(IbisIdentifier master) throws IOException {
         System.out.println("I am a worker");
         int result = -1;
-        while(true){
-	        // Create a send port for sending requests and connect.
-	        SendPort sendRequestPort = ibis.createSendPort(requestPortType);
-	        sendRequestPort.connect(master, "master");
+        // Create a send port for sending requests and connect.
+        SendPort sendRequestPort = ibis.createSendPort(requestPortType);
+        sendRequestPort.connect(master, "master");
 
-	        // Create a receive port for receiving replies from the master
-	        ReceivePort receiveReplyPort = ibis.createReceivePort(replyPortType, "reply");
-	        receiveReplyPort.enableConnections();
-	        
+        // Create a receive port for receiving replies from the master
+        ReceivePort receiveReplyPort = ibis.createReceivePort(replyPortType, "reply");
+        receiveReplyPort.enableConnections();
+        while(true){
 	        // Send request to master with identifier for receive port so the
 	        // master knows where to send the reply to
 	        WriteMessage request = sendRequestPort.newMessage();
@@ -203,11 +220,11 @@ public class Rubiks implements MessageUpcall {
 
 	        reply.finish();
 
-	        // Close ports
-	        sendRequestPort.close();
-	        receiveReplyPort.close();
-
+	       	// If myCube equals null, we are done and we can close the connection
 	        if(myCube == null){
+				// Close ports
+				sendRequestPort.close();
+				receiveReplyPort.close();	
 	            return;
 	        }
 
@@ -224,7 +241,6 @@ public class Rubiks implements MessageUpcall {
         int twists = 11;
         int seed = 0;
         String fileName = null;
-        solved = false;
 
         // number of threads used to solve puzzle
         // (not used in sequential version)
@@ -353,7 +369,7 @@ public class Rubiks implements MessageUpcall {
 
        		// queue is empty, wait for all results from workers
         	synchronized (this) {
-        		while (numWorkers.get() != 0) {
+        		while (activeWorkers.get() != 0) {
 					try {
 						this.wait();
 					} catch (Exception e) {
