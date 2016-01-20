@@ -37,16 +37,23 @@ public class Rubiks implements MessageUpcall {
     private AtomicInteger activeWorkers;
 	private AtomicInteger solutions;
 
-    private void generateJobs(Cube cube) {
-		
+    private void generateJobs(Cube cube, boolean moreJobs) {
+		Cube[] cubes, children;
 		// cache used for cube objects. Doing new Cube() for every move
         // overloads the garbage collector
         CubeCache cache = new CubeCache(cube.getSize());
-
     	// generate all possible cubes from this one by twisting it in
         // every possible way. Gets new objects from the cache
-        jobQueue.addAll(Arrays.asList(cube.generateChildren(cache)));
-
+        cubes = cube.generateChildren(cache);
+    	if (moreJobs){
+        	for (Cube child : cubes) {
+        		children = child.generateChildren(cache);
+        		jobQueue.addAll(Arrays.asList(children));
+    		}
+    	} else {
+        	jobQueue.addAll(Arrays.asList(cubes));
+    	}
+    	
         // unlock threads (worker requests) waiting for the queue
 	    synchronized (queueLock){ 
 	        queueReady = true; 
@@ -339,14 +346,18 @@ public class Rubiks implements MessageUpcall {
      */
     private void solve(Cube cube) {
         int bound = 0;
-
+        boolean moreJobs;
         System.out.print("Bound now:");
 
         while (solutions.get() == 0) {
+        	moreJobs = false;
         	queueReady = false;
 	       	bound++;
             cube.setBound(bound);
-            generateJobs(cube);
+            if (bound > 1) {
+            	moreJobs = true;
+            } 
+            generateJobs(cube, moreJobs);
         	System.out.print(" " + bound);
 
         	Cube myCube = null;
