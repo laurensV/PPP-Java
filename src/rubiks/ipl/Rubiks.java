@@ -62,7 +62,7 @@ public class Rubiks implements MessageUpcall {
     }
     
     private void master(int size, int twists, int seed, String fileName) throws IOException {
-        System.out.println("I am the master");
+       // System.out.println("I am the master");
         // initialize variables
         queueReady = false;
         solved = false;
@@ -148,7 +148,7 @@ public class Rubiks implements MessageUpcall {
 
 		        // Connect to the port id of the worker
 		        sendReplyPort.connect(worker, "reply");
-
+			//System.out.println("worker connected!");
 				workers.put(worker, sendReplyPort);
 			} catch (IOException e) {
 				e.printStackTrace(System.err);
@@ -197,7 +197,7 @@ public class Rubiks implements MessageUpcall {
     }
 
      private void worker(IbisIdentifier master) throws IOException {
-        System.out.println("I am a worker");
+        //System.out.println("I am a worker");
         int result = -1;
         // Create a send port for sending requests and connect.
         SendPort sendRequestPort = ibis.createSendPort(requestPortType);
@@ -220,7 +220,7 @@ public class Rubiks implements MessageUpcall {
 	        Cube myCube = null;
 	        try {
 	            myCube = (Cube) reply.readObject();
-	            System.out.println("Received a cube!");
+	           // System.out.println("Received a cube!");
 	        } catch (ClassNotFoundException e) {
 	            e.printStackTrace();
 	        }
