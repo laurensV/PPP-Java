@@ -1,0 +1,159 @@
+--size 3 --twists 11
+seq
+par 1
+par 2
+par 4
+par 8
+par 12
+par 16
+--size 3 --twists 12
+seq
+par 1
+par 2
+par 4
+par 8
+par 12
+par 16
+--size 4 --twists 11
+seq
+par 1
+par 2
+par 4
+par 8
+par 12
+par 16
+--size 3 --twists 11
+seq
+par 1
+par 2
+par 4
+par 8
+par 12
+par 16
+--size 3 --twists 12
+seq
+par 1
+par 2
+par 4
+par 8
+par 12
+par 16
+--size 4 --twists 11
+seq
+par 1
+par 2
+par 4
+par 8
+par 12
+par 16
+--size 3 --twists 11
+seq
+par 1
+par 2
+par 4
+par 8
+par 12
+par 16
+--size 3 --twists 12
+seq
+par 1
+par 2
+par 4
+par 8
+par 12
+par 16
+--size 4 --twists 11
+seq
+par 1
+par 2
+par 4
+par 8
+par 12
+par 16
+--size 3 --twists 11
+seq
+9838
+14755
+9884
+par 1
+16060
+10546
+10493
+par 2
+8477
+5795
+6724
+par 4
+3709
+3360
+3400
+par 8
+2698
+1904
+1878
+par 12
+1805
+1931
+1924
+par 16
+1473
+1577
+1479
+--size 3 --twists 12
+seq
+120553
+120871
+181314
+par 1
+159487
+129379
+127309
+par 2
+66513
+76591
+80705
+par 4
+43141
+40779
+40107
+par 8
+20465
+25483
+23349
+par 12
+19798
+15306
+15760
+par 16
+15532
+15326
+15154
+--size 4 --twists 11
+seq
+191067
+188600
+255105
+par 1
+200907
+204130
+207676
+par 2
+120160
+120281
+116116
+par 4
+74547
+63684
+53643
+par 8
+33965
+32706
+33774
+par 12
+21506
+21462
+31850
+par 16
+21309
+21494
+21250
